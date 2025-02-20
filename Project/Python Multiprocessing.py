@@ -10,14 +10,9 @@ def leitura_matriz(file_path):
         matrix = np.array([list(map(float, line.split())) for line in lines[1:rows+1]])
     return matrix
 
-def multiplicacao_parcial(matrix_a, matrix_b, start_row, end_row, result_queue):
-    partial_result = np.dot(matrix_a[start_row:end_row], matrix_b)
-    result_queue.put((start_row, end_row, partial_result))
-
-def resultado_parcial(result_queue, result_matrix, num_processes):
-    for _ in range(num_processes):
-        start_row, end_row, partial_result = result_queue.get()
-        result_matrix[start_row:end_row] = partial_result
+def multiplicacao_parcial(args):
+    matrix_a, matrix_b, start_row, end_row = args
+    return start_row, end_row, np.dot(matrix_a[start_row:end_row], matrix_b)
 
 def multiplicacao_matriz(matrix_a, matrix_b, num_processes):
     rows_a, cols_a = matrix_a.shape
@@ -27,21 +22,17 @@ def multiplicacao_matriz(matrix_a, matrix_b, num_processes):
         raise ValueError("Número de colunas da matriz A deve ser igual ao número de linhas da matriz B.")
 
     result_matrix = np.zeros((rows_a, cols_b))
-    result_queue = multiprocessing.Queue()
-    processes = []
-
     chunk_size = rows_a // num_processes
-    for i in range(num_processes):
-        start_row = i * chunk_size
-        end_row = (i + 1) * chunk_size if i != num_processes - 1 else rows_a
-        process = multiprocessing.Process(target=multiplicacao_parcial, args=(matrix_a, matrix_b, start_row, end_row, result_queue))
-        processes.append(process)
-        process.start()
+    pool = multiprocessing.Pool(processes=num_processes)
 
-    for process in processes:
-        process.join()
+    tasks = [(matrix_a, matrix_b, i * chunk_size, (i + 1) * chunk_size if i != num_processes - 1 else rows_a)
+             for i in range(num_processes)]
 
-    resultado_parcial(result_queue, result_matrix, num_processes)
+    for start_row, end_row, partial_result in pool.map(multiplicacao_parcial, tasks):
+        result_matrix[start_row:end_row] = partial_result
+
+    pool.close()
+    pool.join()
 
     return result_matrix
 
@@ -65,8 +56,8 @@ def graficos(times, speedup):
     plt.show()
 
 def main():
-    matrix_a = leitura_matriz('4_int.txt')
-    matrix_b = leitura_matriz('4_int.txt')
+    matrix_a = leitura_matriz('128.txt')
+    matrix_b = matrix_a
 
     num_cores = multiprocessing.cpu_count()
 
